@@ -322,3 +322,41 @@
 
 **状态标签**：✅完成
 ---
+
+## 2026-02-14 18:10
+**对话标题**：删除自由填写/引导模式 + 架构优化 + 部署上线
+
+**用户需求**：自由填写和引导模式不要了，删掉，重新梳理结构，做一次架构和代码优化，推到 GitHub 上，并用中国国内可以访问的方式发布。
+
+**解决方案**：
+- **删除模式**：移除 GuidedMode.tsx、WelcomeGuide.tsx 两个组件文件
+- **类型重构**：`AppMode` 移除 `'guided'` 和 `'canvas'`，新增 `'overview'`（画布总览）；移除 `GuidedStep` 类型
+- **数据清理**：layers.ts 删除 `GUIDED_STEPS`；bpmn-flows.ts 删除自由填写和引导模式的 BPMN XML 流程定义
+- **侧边栏重构**：cascade（AI 级联推导）作为默认模式，新增 overview（画布总览），保留方法论库/诊断/流程图/提示词管理/文档中心
+- **App.tsx 简化**：cascade 为默认模式，overview 模式展示金字塔 + 层级编辑，保持 keep-alive 模式
+- **TypeScript 修复**：修复 CI 严格模式下的未使用变量/类型错误
+- **GitHub 部署**：
+  - 使用 `gh` CLI 创建公开仓库 `pyramid-alignment-canvas`
+  - 配置 GitHub Actions 工作流自动构建部署
+  - 配置 Vite `base` 路径为 `/pyramid-alignment-canvas/`
+  - 开启 GitHub Pages
+
+**代码改动**：
+- 删除 `src/components/GuidedMode.tsx`
+- 删除 `src/components/WelcomeGuide.tsx`
+- 重写 `src/types/index.ts`：精简 AppMode，移除 GuidedStep
+- 重写 `src/data/layers.ts`：移除 GUIDED_STEPS
+- 修改 `src/data/bpmn-flows.ts`：移除 canvas/guided 流程定义
+- 重写 `src/components/Sidebar.tsx`：新模式列表
+- 重写 `src/App.tsx`：cascade 默认 + overview 模式
+- 修改 `src/components/CascadeMode.tsx`：修复 TS 严格模式
+- 修改 `src/components/PromptManager.tsx`：移除未用导入
+- 修改 `app/vite.config.ts`：添加 base 路径
+- 新增 `.github/workflows/deploy.yml`：GitHub Actions 部署
+- 新增 `.gitignore`、`README.md`
+
+**部署地址**：https://albertsun6.github.io/pyramid-alignment-canvas/
+**仓库地址**：https://github.com/Albertsun6/pyramid-alignment-canvas
+
+**状态标签**：✅完成
+---
