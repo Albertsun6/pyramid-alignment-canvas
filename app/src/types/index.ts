@@ -38,6 +38,18 @@ export interface Methodology {
   createdAt: string;
   /** true if this methodology was AI-created (not found via search) */
   aiGenerated?: boolean;
+  /** Retrieval-first matching score (0-100) */
+  matchScore?: number;
+  /** Confidence label for retrieval result */
+  confidenceLevel?: 'high' | 'medium' | 'low';
+  /** Why this methodology fits current constraints */
+  fitReasons?: string[];
+  /** Potential conflicts with current constraints */
+  conflicts?: string[];
+  /** One key risk for quick scan */
+  riskNote?: string;
+  /** Qualitative hint of evidence style */
+  evidenceType?: '定量' | '定性' | '混合';
 }
 
 export interface CanvasData {
@@ -54,7 +66,15 @@ export interface DiagnosisOption {
   layerId: number;
 }
 
-export type AppMode = 'cascade' | 'overview' | 'diagnosis' | 'methodologies' | 'flowchart' | 'prompts' | 'docs';
+export type AppMode =
+  | 'cascade'
+  | 'overview'
+  | 'diagnosis'
+  | 'methodologies'
+  | 'flowchart'
+  | 'prompts'
+  | 'skills'
+  | 'docs';
 
 export type AIProvider = 'openai' | 'openrouter' | 'custom';
 
@@ -63,9 +83,27 @@ export interface AISettings {
   apiKey: string;
   baseUrl: string;
   model: string;
+  // Intent routing strategy (start path recommendation)
+  routeThresholdMethodology: number; // score >= methodology and < full
+  routeThresholdFull: number; // score >= full
+  routeKeywordsHighImpact: string; // comma-separated keywords
+  routeKeywordsUncertainty: string; // comma-separated keywords
+  routeKeywordsExecute: string; // comma-separated keywords
 }
 
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+}
+
+export interface SkillTemplate {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  // Suggested start route preference
+  preferredStartPath?: 'method' | 'methodology' | 'full';
+  // Extra constraints/hints injected into AI context
+  promptHints: string[];
+  builtIn?: boolean;
 }

@@ -16,7 +16,7 @@ export function DiagnosisMode({ onGoToLayer }: Props) {
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm mb-4">
           <AlertTriangle size={16} />
-          一眼诊断
+          卡点诊断
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">卡住了？找到根因在哪一层</h2>
         <p className="text-slate-400">选择最接近你当前困境的描述</p>

@@ -4,6 +4,7 @@ import { LAYERS } from './data/layers';
 import { useCanvas } from './hooks/useCanvas';
 import { useAISettings } from './hooks/useAISettings';
 import { usePrompts } from './hooks/usePrompts';
+import { useSkills } from './hooks/useSkills';
 import { Sidebar } from './components/Sidebar';
 import { PyramidView } from './components/PyramidView';
 import { LayerCard } from './components/LayerCard';
@@ -15,7 +16,8 @@ import { FlowchartPanel } from './components/FlowchartPanel';
 import { PromptManager } from './components/PromptManager';
 import { ExportButton } from './components/ExportButton';
 import { SettingsPanel } from './components/SettingsPanel';
-import { PenLine } from 'lucide-react';
+import { SkillsManager } from './components/SkillsManager';
+import { PenLine, Loader2, CloudOff, RefreshCw, CheckCircle2, PanelLeftOpen } from 'lucide-react';
 
 function App() {
   const {
@@ -28,14 +30,20 @@ function App() {
     updateMethodologies,
     createNew,
     deleteCanvas,
+    saveState,
+    saveError,
+    lastSyncedAt,
+    retryRemoteSync,
   } = useCanvas();
 
   const { settings: aiSettings, updateSettings: updateAISettings, isConfigured: aiConfigured } = useAISettings();
   const { prompts, updatePrompt, resetPrompt, resetAll: resetAllPrompts } = usePrompts();
+  const { builtInSkills, customSkills, allSkills, addSkill, updateSkill, deleteSkill } = useSkills();
 
   const [mode, setMode] = useState<AppMode>('cascade');
   const [activeLayerId, setActiveLayerId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Track which stateful modes have been activated (keep-alive)
   const [activatedModes, setActivatedModes] = useState<Set<AppMode>>(new Set(['cascade']));
@@ -54,22 +62,56 @@ function App() {
     setActiveLayerId(layerId);
   }, [handleModeChange]);
 
+  const handleCreateRunBoard = useCallback(() => {
+    const stamp = new Date().toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).replace(/\//g, '-');
+    createNew(`推导画板 ${stamp}`);
+  }, [createNew]);
+
   return (
     <div className="flex h-screen overflow-hidden">
+      <div className="hidden md:flex">
+        <Sidebar
+          canvasList={canvasList}
+          activeId={activeId}
+          mode={mode}
+          onSelectCanvas={setActiveId}
+          onCreateNew={createNew}
+          onDelete={deleteCanvas}
+          onModeChange={handleModeChange}
+        />
+      </div>
       <Sidebar
+        mobile
+        open={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
         canvasList={canvasList}
         activeId={activeId}
         mode={mode}
         onSelectCanvas={setActiveId}
         onCreateNew={createNew}
         onDelete={deleteCanvas}
-        onModeChange={handleModeChange}
+        onModeChange={(m) => {
+          handleModeChange(m);
+          setMobileSidebarOpen(false);
+        }}
       />
 
       <main className="flex-1 overflow-y-auto">
         {/* Top bar */}
-        <header className="sticky top-0 z-10 bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50 px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <header className="sticky top-0 z-10 bg-slate-900/80 backdrop-blur-md border-b border-slate-700/50 px-3 sm:px-6 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="md:hidden p-2 rounded-lg hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+              title="打开菜单"
+            >
+              <PanelLeftOpen size={16} />
+            </button>
             {editingTitle ? (
               <input
                 autoFocus
@@ -77,28 +119,78 @@ function App() {
                 onChange={(e) => updateTitle(e.target.value)}
                 onBlur={() => setEditingTitle(false)}
                 onKeyDown={(e) => e.key === 'Enter' && setEditingTitle(false)}
-                className="bg-transparent border-b border-slate-500 text-white text-lg font-semibold px-1 py-0 focus:outline-none focus:border-blue-400"
+                className="bg-transparent border-b border-slate-500 text-white text-base sm:text-lg font-semibold px-1 py-0 focus:outline-none focus:border-blue-400 w-full"
               />
             ) : (
               <h2
-                className="text-lg font-semibold text-white flex items-center gap-2 cursor-pointer hover:text-blue-300 transition-colors"
+                className="text-base sm:text-lg font-semibold text-white flex items-center gap-2 cursor-pointer hover:text-blue-300 transition-colors min-w-0 truncate"
                 onClick={() => setEditingTitle(true)}
               >
-                {activeCanvas.title}
+                <span className="truncate">{activeCanvas.title}</span>
                 <PenLine size={14} className="text-slate-500" />
               </h2>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            <span className="hidden sm:block text-xs text-slate-500 order-3 sm:order-none w-full sm:w-auto">
               更新于 {new Date(activeCanvas.updatedAt).toLocaleString('zh-CN')}
             </span>
-            <SettingsPanel
+            <div
+              className={`text-xs px-2.5 py-1 rounded-lg border flex items-center gap-1.5 order-1 sm:order-none ${
+                saveState === 'saved'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  : saveState === 'syncing'
+                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                  : saveState === 'error'
+                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                  : 'bg-slate-700/30 text-slate-400 border-slate-600/40'
+              }`}
+              title={saveError || '画布自动保存状态'}
+            >
+              {saveState === 'syncing' && (
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  <span className="whitespace-nowrap sm:hidden">保存中</span>
+                  <span className="whitespace-nowrap hidden sm:inline">云端保存中...</span>
+                </>
+              )}
+              {saveState === 'saved' && (
+                <>
+                  <CheckCircle2 size={12} />
+                  <span className="whitespace-nowrap sm:hidden">已保存</span>
+                  <span className="whitespace-nowrap hidden sm:inline">已云端保存</span>
+                  {lastSyncedAt ? <span className="hidden sm:inline"> {new Date(lastSyncedAt).toLocaleTimeString('zh-CN')}</span> : ''}
+                </>
+              )}
+              {saveState === 'error' && (
+                <>
+                  <CloudOff size={12} />
+                  <span className="whitespace-nowrap sm:hidden">保存失败</span>
+                  <span className="whitespace-nowrap hidden sm:inline">云端保存失败（已本地保存）</span>
+                  <button
+                    onClick={retryRemoteSync}
+                    className="ml-1 inline-flex items-center gap-1 underline hover:text-amber-200 cursor-pointer"
+                  >
+                    <RefreshCw size={10} />
+                    重试
+                  </button>
+                </>
+              )}
+              {saveState === 'local-only' && (
+                <>
+                  <CloudOff size={12} />
+                  <span className="whitespace-nowrap sm:hidden">仅本地保存</span>
+                  <span className="whitespace-nowrap hidden sm:inline">仅本地保存（未配置云端）</span>
+                </>
+              )}
+              {saveState === 'idle' && '准备保存...'}
+            </div>
+            <div className="order-2 sm:order-none"><SettingsPanel
               settings={aiSettings}
               isConfigured={aiConfigured}
               onUpdate={updateAISettings}
-            />
-            <ExportButton canvas={activeCanvas} />
+            /></div>
+            <div className="order-2 sm:order-none"><ExportButton canvas={activeCanvas} /></div>
           </div>
         </header>
 
@@ -112,8 +204,10 @@ function App() {
                 aiConfigured={aiConfigured}
                 onUpdateLayer={updateLayerData}
                 onUpdateMethodologies={updateMethodologies}
+                onCreateRunBoard={handleCreateRunBoard}
                 onExit={() => handleModeChange('overview')}
                 promptStore={prompts}
+                skillsLibrary={allSkills}
               />
             </div>
           )}
@@ -185,6 +279,17 @@ function App() {
               onUpdatePrompt={updatePrompt}
               onResetPrompt={resetPrompt}
               onResetAll={resetAllPrompts}
+            />
+          )}
+
+          {/* ===== Skills Manager ===== */}
+          {mode === 'skills' && (
+            <SkillsManager
+              builtInSkills={builtInSkills}
+              customSkills={customSkills}
+              onAddSkill={addSkill}
+              onUpdateSkill={updateSkill}
+              onDeleteSkill={deleteSkill}
             />
           )}
 

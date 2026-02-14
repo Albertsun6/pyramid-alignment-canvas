@@ -19,7 +19,7 @@ export function DocsPanel() {
       <nav className="w-64 shrink-0 overflow-y-auto pr-2">
         <div className="flex items-center gap-2 text-slate-400 text-sm mb-4">
           <BookOpen size={16} />
-          <span className="font-medium">文档中心</span>
+          <span className="font-medium">帮助文档</span>
         </div>
 
         <div className="space-y-3">

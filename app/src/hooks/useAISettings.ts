@@ -8,6 +8,11 @@ const DEFAULT_SETTINGS: AISettings = {
   apiKey: '',
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4o',
+  routeThresholdMethodology: 2,
+  routeThresholdFull: 5,
+  routeKeywordsHighImpact: '战略,组织,跨团队,跨部门,公司级,体系,治理,转型',
+  routeKeywordsUncertainty: '不确定,探索,复杂,冲突,取舍,长期,路线,范式',
+  routeKeywordsExecute: '马上,今天,执行,落地,修复,脚本,页面,短期,快速',
 };
 
 export function useAISettings() {

@@ -3,16 +3,16 @@ import type { LayerConfig, DiagnosisOption, CanvasData } from '../types';
 export const LAYERS: LayerConfig[] = [
   {
     id: 0,
-    name: '问题卡',
+    name: '落地定义',
     nameEn: 'Problem',
-    subtitle: '30 秒锁定问题',
-    coreQuestion: '我到底要解决什么问题？',
+    subtitle: '把推导落到执行',
+    coreQuestion: '最终要执行和验收什么？',
     color: 'var(--color-layer-0)',
     bgColor: 'rgba(100, 116, 139, 0.15)',
     borderColor: 'rgba(100, 116, 139, 0.4)',
     fields: [
-      { id: 'problem', label: '要解决的问题', placeholder: '用一句话描述你面对的核心问题...', type: 'textarea' },
-      { id: 'success', label: '成功长什么样', placeholder: '达成后的具体状态/指标...', type: 'textarea' },
+      { id: 'problem', label: '落地目标', placeholder: '用一句话描述最终要执行/落地的目标...', type: 'textarea' },
+      { id: 'success', label: '成功标准', placeholder: '达成后的具体状态/指标...', type: 'textarea' },
       { id: 'constraints', label: '硬约束', placeholder: '时间/预算/法规/安全/伦理红线...', type: 'textarea' },
     ],
   },

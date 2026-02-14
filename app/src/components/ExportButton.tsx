@@ -67,7 +67,7 @@ export function ExportButton({ canvas }: Props) {
       title="导出为 Markdown"
     >
       <Download size={14} />
-      导出
+      <span className="hidden sm:inline">导出</span>
     </button>
   );
 }

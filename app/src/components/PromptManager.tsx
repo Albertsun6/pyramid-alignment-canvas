@@ -140,11 +140,19 @@ export function PromptManager({
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-sm mb-4">
           <Code2 size={16} />
-          提示词管理
+          高级设置
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">系统提示词</h2>
         <p className="text-slate-400 text-sm max-w-lg mx-auto">
           查看和修改所有 AI 交互使用的提示词。修改后立即生效，也可以让 AI 帮你优化。
+        </p>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3">
+        <p className="text-xs text-cyan-200 leading-relaxed">
+          <span className="font-medium">意图起点路由策略</span> 不在本页编辑。
+          请点击右上角 <span className="font-medium">AI</span> 按钮，进入“AI 模型设置”后，在
+          <span className="font-medium">「意图起点路由策略」</span>区块中调整阈值与预设（保守/平衡/激进）。
         </p>
       </div>
 

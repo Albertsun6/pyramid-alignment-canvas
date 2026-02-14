@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AISettings, AIProvider } from '../types';
 import { Settings, X, Eye, EyeOff, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 
@@ -17,6 +17,72 @@ interface ProviderPreset {
   docsUrl: string;
   models: { value: string; label: string }[];
 }
+
+interface OpenRouterModelItem {
+  id: string;
+  name?: string;
+  created?: number;
+  architecture?: {
+    input_modalities?: string[];
+    output_modalities?: string[];
+  };
+}
+
+interface OpenRouterModelsResponse {
+  data?: OpenRouterModelItem[];
+}
+
+const OPENROUTER_RECOMMENDED: { value: string; label: string }[] = [
+  { value: 'anthropic/claude-opus-4.6', label: 'Claude Opus 4.6（强推）' },
+  { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4（推荐）' },
+  { value: 'openai/gpt-5.2-codex', label: 'GPT-5.2-Codex（代码）' },
+  { value: 'openai/gpt-4o', label: 'GPT-4o（通用）' },
+  { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini（快速/便宜）' },
+  { value: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash' },
+  { value: 'deepseek/deepseek-chat', label: 'DeepSeek V3' },
+  { value: 'deepseek/deepseek-reasoner', label: 'DeepSeek R1' },
+  { value: 'qwen/qwen3-max-thinking', label: 'Qwen3 Max Thinking' },
+  { value: 'qwen/qwen3-coder-next', label: 'Qwen3 Coder Next' },
+  { value: 'openrouter/free', label: 'OpenRouter Free Router（免费路由）' },
+];
+
+const OPENROUTER_VENDOR_FILTERS = [
+  { id: 'all', label: '全部' },
+  { id: 'openai', label: 'OpenAI' },
+  { id: 'anthropic', label: 'Anthropic' },
+  { id: 'google', label: 'Google' },
+  { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'qwen', label: 'Qwen' },
+  { id: 'meta-llama', label: 'Llama' },
+  { id: 'openrouter', label: 'OpenRouter' },
+] as const;
+
+const ROUTE_PRESETS = {
+  conservative: {
+    label: '保守',
+    thresholdMethodology: 1,
+    thresholdFull: 4,
+    highImpact: '战略,组织,跨团队,跨部门,公司级,体系,治理,转型',
+    uncertainty: '不确定,探索,复杂,冲突,取舍,长期,路线,范式',
+    execute: '马上,今天,执行,落地,修复,脚本,页面,短期',
+  },
+  balanced: {
+    label: '平衡',
+    thresholdMethodology: 2,
+    thresholdFull: 5,
+    highImpact: '战略,组织,跨团队,跨部门,公司级,体系,治理,转型',
+    uncertainty: '不确定,探索,复杂,冲突,取舍,长期,路线,范式',
+    execute: '马上,今天,执行,落地,修复,脚本,页面,短期,快速',
+  },
+  aggressive: {
+    label: '激进',
+    thresholdMethodology: 3,
+    thresholdFull: 7,
+    highImpact: '组织,战略,跨团队,跨部门,治理,转型,平台化,中台',
+    uncertainty: '不确定,探索,复杂,冲突,取舍,长期,路线,范式,多目标',
+    execute: '马上,今天,执行,快速,临时,试验,小步',
+  },
+} as const;
 
 const PROVIDERS: ProviderPreset[] = [
   {
@@ -40,18 +106,7 @@ const PROVIDERS: ProviderPreset[] = [
     keyPlaceholder: 'sk-or-v1-...',
     keyHint: '从 openrouter.ai/keys 获取，支持数百种模型',
     docsUrl: 'https://openrouter.ai/keys',
-    models: [
-      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4（推荐）' },
-      { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-      { value: 'openai/gpt-4o', label: 'GPT-4o' },
-      { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
-      { value: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash' },
-      { value: 'google/gemini-2.5-pro-preview', label: 'Gemini 2.5 Pro' },
-      { value: 'deepseek/deepseek-chat', label: 'DeepSeek V3' },
-      { value: 'deepseek/deepseek-reasoner', label: 'DeepSeek R1' },
-      { value: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick' },
-      { value: 'qwen/qwen3-235b-a22b', label: 'Qwen3 235B' },
-    ],
+    models: OPENROUTER_RECOMMENDED,
   },
   {
     id: 'custom',
@@ -68,10 +123,81 @@ export function SettingsPanel({ settings, isConfigured, onUpdate }: Props) {
   const [open, setOpen] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [customModel, setCustomModel] = useState(false);
+  const [modelQuery, setModelQuery] = useState('');
+  const [vendorFilter, setVendorFilter] = useState<(typeof OPENROUTER_VENDOR_FILTERS)[number]['id']>('all');
+  const [openrouterModels, setOpenrouterModels] = useState<{ value: string; label: string }[]>([]);
+  const [openrouterLoading, setOpenrouterLoading] = useState(false);
+  const [openrouterError, setOpenrouterError] = useState<string | null>(null);
 
   const currentProvider = PROVIDERS.find((p) => p.id === settings.provider) ?? PROVIDERS[0];
-  const modelList = currentProvider.models;
+  const modelList = useMemo(() => {
+    if (settings.provider !== 'openrouter') return currentProvider.models;
+    const map = new Map<string, { value: string; label: string }>();
+    for (const m of OPENROUTER_RECOMMENDED) map.set(m.value, m);
+    for (const m of openrouterModels) {
+      if (!map.has(m.value)) map.set(m.value, m);
+    }
+    return Array.from(map.values());
+  }, [settings.provider, currentProvider.models, openrouterModels]);
+  const displayedModelList = useMemo(() => {
+    if (settings.provider !== 'openrouter') return modelList;
+    return modelList.slice(0, 120);
+  }, [settings.provider, modelList]);
+  const filteredModelList = useMemo(() => {
+    const q = modelQuery.trim().toLowerCase();
+    return displayedModelList.filter((m) => {
+      if (vendorFilter !== 'all' && !m.value.toLowerCase().startsWith(`${vendorFilter}/`)) {
+        return false;
+      }
+      if (!q) return true;
+      const label = m.label.toLowerCase();
+      const value = m.value.toLowerCase();
+      return label.includes(q) || value.includes(q);
+    });
+  }, [displayedModelList, modelQuery, vendorFilter]);
   const isModelInList = modelList.some((m) => m.value === settings.model);
+
+  useEffect(() => {
+    if (!open || settings.provider !== 'openrouter') return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const load = async () => {
+      setOpenrouterLoading(true);
+      setOpenrouterError(null);
+      try {
+        const res = await fetch('https://openrouter.ai/api/v1/models', { signal: ctrl.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as OpenRouterModelsResponse;
+        const data = Array.isArray(json.data) ? json.data : [];
+        const normalized = data
+          .filter((m) => {
+            const inMods = m.architecture?.input_modalities ?? [];
+            const outMods = m.architecture?.output_modalities ?? [];
+            const textIn = inMods.length === 0 || inMods.includes('text');
+            const textOut = outMods.length === 0 || outMods.includes('text');
+            return textIn && textOut;
+          })
+          .sort((a, b) => (b.created ?? 0) - (a.created ?? 0))
+          .map((m) => ({
+            value: m.id,
+            label: m.name?.trim() || m.id,
+          }));
+        if (!cancelled) setOpenrouterModels(normalized);
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : '加载失败';
+          setOpenrouterError(msg);
+        }
+      } finally {
+        if (!cancelled) setOpenrouterLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [open, settings.provider]);
 
   const handleProviderChange = (providerId: AIProvider) => {
     const provider = PROVIDERS.find((p) => p.id === providerId)!;
@@ -84,7 +210,26 @@ export function SettingsPanel({ settings, isConfigured, onUpdate }: Props) {
       update.model = provider.models[0].value;
     }
     setCustomModel(false);
+    setModelQuery('');
+    setVendorFilter('all');
     onUpdate(update);
+  };
+
+  const updateNumber = (key: 'routeThresholdMethodology' | 'routeThresholdFull', value: string) => {
+    const num = Number(value);
+    if (Number.isNaN(num)) return;
+    onUpdate({ [key]: Math.max(-10, Math.min(20, Math.round(num))) });
+  };
+
+  const applyRoutePreset = (presetId: keyof typeof ROUTE_PRESETS) => {
+    const preset = ROUTE_PRESETS[presetId];
+    onUpdate({
+      routeThresholdMethodology: preset.thresholdMethodology,
+      routeThresholdFull: preset.thresholdFull,
+      routeKeywordsHighImpact: preset.highImpact,
+      routeKeywordsUncertainty: preset.uncertainty,
+      routeKeywordsExecute: preset.execute,
+    });
   };
 
   return (
@@ -214,11 +359,44 @@ export function SettingsPanel({ settings, isConfigured, onUpdate }: Props) {
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
                   模型
                 </label>
+                {settings.provider === 'openrouter' && (
+                  <div className="mb-2 space-y-2">
+                    <div className="text-xs text-slate-500">
+                      {openrouterLoading
+                        ? '正在同步 OpenRouter 最新模型列表...'
+                        : openrouterError
+                        ? `拉取最新模型失败（已回退推荐列表）：${openrouterError}`
+                        : `已同步 OpenRouter 最新模型，共 ${modelList.length} 个可选（列表显示前 ${displayedModelList.length} 个）`}
+                    </div>
+                    <input
+                      type="text"
+                      value={modelQuery}
+                      onChange={(e) => setModelQuery(e.target.value)}
+                      placeholder="搜索模型名称或ID，例如 claude / gpt / qwen..."
+                      className="w-full bg-slate-900/60 border border-slate-600/50 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {OPENROUTER_VENDOR_FILTERS.map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => setVendorFilter(f.id)}
+                          className={`px-2 py-1 rounded-md text-xs border transition-colors cursor-pointer ${
+                            vendorFilter === f.id
+                              ? 'bg-blue-600/20 text-blue-300 border-blue-500/40'
+                              : 'bg-slate-900/40 text-slate-500 border-slate-700/50 hover:text-slate-300'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Model list for providers with presets */}
-                {modelList.length > 0 && !customModel && (
+                {filteredModelList.length > 0 && !customModel && (
                   <div className="space-y-1.5 mb-2">
-                    {modelList.map((m) => (
+                    {filteredModelList.map((m) => (
                       <button
                         key={m.value}
                         onClick={() => onUpdate({ model: m.value })}
@@ -232,6 +410,11 @@ export function SettingsPanel({ settings, isConfigured, onUpdate }: Props) {
                         <span className="text-xs text-slate-600 ml-2">{m.value}</span>
                       </button>
                     ))}
+                  </div>
+                )}
+                {settings.provider === 'openrouter' && !customModel && filteredModelList.length === 0 && (
+                  <div className="text-xs text-slate-500 px-2 py-3 border border-slate-700/50 rounded-lg bg-slate-900/30">
+                    未找到匹配模型，请尝试其他关键词或使用“自定义模型名”。
                   </div>
                 )}
 
@@ -260,6 +443,83 @@ export function SettingsPanel({ settings, isConfigured, onUpdate }: Props) {
                     {customModel ? '← 返回预设列表' : '使用自定义模型名 →'}
                   </button>
                 )}
+              </div>
+
+              {/* Intent routing strategy */}
+              <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium text-cyan-300">意图起点路由策略</h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    调整“方法优先 / 方法论优先 / 全流程”的推荐阈值和关键词命中规则。
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs text-slate-400">策略预设</div>
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.keys(ROUTE_PRESETS) as Array<keyof typeof ROUTE_PRESETS>).map((id) => (
+                      <button
+                        key={id}
+                        onClick={() => applyRoutePreset(id)}
+                        className="px-2.5 py-1 rounded-md text-xs border border-slate-600/60 bg-slate-900/40 text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+                      >
+                        {ROUTE_PRESETS[id].label}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => applyRoutePreset('balanced')}
+                      className="px-2.5 py-1 rounded-md text-xs border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition-colors cursor-pointer"
+                    >
+                      恢复默认（平衡）
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs text-slate-400">
+                    方法论阈值（大于等于）
+                    <input
+                      type="number"
+                      value={settings.routeThresholdMethodology}
+                      onChange={(e) => updateNumber('routeThresholdMethodology', e.target.value)}
+                      className="mt-1 w-full bg-slate-900/60 border border-slate-600/50 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                    />
+                  </label>
+                  <label className="text-xs text-slate-400">
+                    全流程阈值（大于等于）
+                    <input
+                      type="number"
+                      value={settings.routeThresholdFull}
+                      onChange={(e) => updateNumber('routeThresholdFull', e.target.value)}
+                      className="mt-1 w-full bg-slate-900/60 border border-slate-600/50 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                    />
+                  </label>
+                </div>
+                <label className="block text-xs text-slate-400">
+                  高影响关键词（加分，逗号分隔）
+                  <input
+                    type="text"
+                    value={settings.routeKeywordsHighImpact}
+                    onChange={(e) => onUpdate({ routeKeywordsHighImpact: e.target.value })}
+                    className="mt-1 w-full bg-slate-900/60 border border-slate-600/50 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                  />
+                </label>
+                <label className="block text-xs text-slate-400">
+                  高不确定关键词（加分，逗号分隔）
+                  <input
+                    type="text"
+                    value={settings.routeKeywordsUncertainty}
+                    onChange={(e) => onUpdate({ routeKeywordsUncertainty: e.target.value })}
+                    className="mt-1 w-full bg-slate-900/60 border border-slate-600/50 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                  />
+                </label>
+                <label className="block text-xs text-slate-400">
+                  执行导向关键词（减分，逗号分隔）
+                  <input
+                    type="text"
+                    value={settings.routeKeywordsExecute}
+                    onChange={(e) => onUpdate({ routeKeywordsExecute: e.target.value })}
+                    className="mt-1 w-full bg-slate-900/60 border border-slate-600/50 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                  />
+                </label>
               </div>
 
               {/* Status */}

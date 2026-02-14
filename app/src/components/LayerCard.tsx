@@ -186,7 +186,7 @@ export function LayerCard({ layer, data, onChange, aiSettings, aiConfigured, can
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-violet-500/30 bg-violet-500/5 hover:bg-violet-500/10 text-violet-400 text-sm font-medium transition-colors cursor-pointer"
           >
             <Library size={16} />
-            打开方法论库 — AI 搜索现有方法论并应用
+            打开方法论匹配 — 检索并应用方案
           </button>
         </div>
       )}

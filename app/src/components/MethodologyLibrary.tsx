@@ -88,6 +88,19 @@ function MethodologyCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h4 className="font-semibold text-white text-sm">{m.name}</h4>
+            {typeof m.matchScore === 'number' && (
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full border ${
+                  m.matchScore >= 75
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : m.matchScore >= 55
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                    : 'bg-slate-700 text-slate-300 border-slate-500/30'
+                }`}
+              >
+                匹配分 {m.matchScore}
+              </span>
+            )}
             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 border border-slate-600/50">
               {m.origin}
             </span>
@@ -109,6 +122,12 @@ function MethodologyCard({
             )}
           </div>
           <p className="text-sm text-slate-400 mt-1 leading-relaxed">{m.coreIdea}</p>
+          {m.fitReasons && m.fitReasons.length > 0 && (
+            <p className="text-xs text-emerald-400/90 mt-1">适配：{m.fitReasons.slice(0, 2).join('；')}</p>
+          )}
+          {m.conflicts && m.conflicts.length > 0 && (
+            <p className="text-xs text-amber-400/90 mt-1">冲突：{m.conflicts[0]}</p>
+          )}
         </div>
 
         {/* Actions */}
@@ -191,6 +210,7 @@ export function MethodologyLibrary({
   const [customQuery, setCustomQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [searchMeta, setSearchMeta] = useState<{ topScore: number; avgTop3: number; low: boolean } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Derive categories from methodologies
@@ -209,7 +229,6 @@ export function MethodologyLibrary({
   }, [methodologies, activeCategory]);
 
   const handleSearch = useCallback(async () => {
-    if (!aiConfigured) return;
     setSearching(true);
     setError(null);
 
@@ -227,15 +246,21 @@ export function MethodologyLibrary({
       const existingNames = new Set(methodologies.map((m) => m.name));
       const newOnes = result.methodologies.filter((m) => !existingNames.has(m.name));
       onUpdateMethodologies([...methodologies, ...newOnes]);
+      setSearchMeta({
+        topScore: result.topScore ?? 0,
+        avgTop3: result.avgTop3 ?? 0,
+        low: !!result.isLowConfidence,
+      });
 
       const newIds = new Set(newOnes.map((m) => m.id));
       setExpandedIds((prev) => new Set([...prev, ...newIds]));
     } else {
       setError(result.error || '搜索失败');
+      setSearchMeta(null);
     }
 
     setSearching(false);
-  }, [aiConfigured, aiSettings, canvas, customQuery, methodologies, onUpdateMethodologies, promptStore]);
+  }, [aiSettings, canvas, customQuery, methodologies, onUpdateMethodologies, promptStore]);
 
   const handleCreate = useCallback(async () => {
     if (!aiConfigured) return;
@@ -316,9 +341,9 @@ export function MethodologyLibrary({
             <Library size={20} className="text-violet-400" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">方法论库</h2>
+            <h2 className="text-xl font-bold text-white">方法论匹配</h2>
             <p className="text-sm text-slate-400">
-              搜索真实方法论或让 AI 创建定制方法论，选定后应用到第 2 层
+              检索优先推荐（含匹配分与冲突提示），低置信度时可一键 AI 定制
             </p>
           </div>
         </div>
@@ -368,9 +393,9 @@ export function MethodologyLibrary({
           />
           <button
             onClick={handleSearch}
-            disabled={isBusy || !aiConfigured}
+            disabled={isBusy}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer shrink-0 ${
-              isBusy || !aiConfigured
+              isBusy
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 : 'bg-violet-600 hover:bg-violet-500 text-white'
             }`}
@@ -417,7 +442,7 @@ export function MethodologyLibrary({
         </div>
 
         {!aiConfigured && (
-          <p className="text-xs text-slate-500">请先在右上角设置 AI API 密钥</p>
+          <p className="text-xs text-slate-500">未配置 AI 时仍可“检索推荐”，但“AI 创建”不可用</p>
         )}
       </div>
 
@@ -428,6 +453,24 @@ export function MethodologyLibrary({
           <div>
             <span className="font-medium">操作失败：</span>
             {error}
+          </div>
+        </div>
+      )}
+
+      {searchMeta && (
+        <div
+          className={`px-4 py-3 rounded-xl border text-sm ${
+            searchMeta.low
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+          }`}
+        >
+          <div className="font-medium">
+            {searchMeta.low ? '当前结果为低置信度推荐' : '已返回高可用候选'}
+          </div>
+          <div className="text-xs mt-1 opacity-90">
+            Top1 匹配分 {searchMeta.topScore} · Top3 平均分 {searchMeta.avgTop3}
+            {searchMeta.low ? ' · 建议放宽约束再搜，或使用 AI 定制' : ''}
           </div>
         </div>
       )}
@@ -499,7 +542,7 @@ export function MethodologyLibrary({
       {methodologies.length === 0 && !isBusy && !error && (
         <div className="text-center py-12 text-slate-500">
           <Library size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="text-base font-medium">方法论库为空</p>
+          <p className="text-base font-medium">暂无可用方法论</p>
           <p className="text-sm mt-1">
             搜索真实方法论，或让 AI 为你创建定制方法论
           </p>
