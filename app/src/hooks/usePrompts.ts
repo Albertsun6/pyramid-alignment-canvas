@@ -76,6 +76,7 @@ export const DEFAULT_PROMPTS: Record<string, PromptTemplate> = {
   {
     "name": "方法论名称（中文 + 原名）",
     "origin": "来源领域",
+    "category": "分类标签（如：项目管理、产品设计、系统思维、决策分析、组织管理、技术架构、个人成长、创新方法 等）",
     "description": "200字以内详细描述",
     "coreIdea": "一句话核心思想",
     "applicability": "适用场景与条件",

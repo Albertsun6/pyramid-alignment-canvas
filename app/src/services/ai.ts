@@ -348,7 +348,7 @@ export interface MethodologySearchResult {
 /**
  * Parse AI response into Methodology objects
  */
-function parseMethodologyResponse(text: string): Methodology[] {
+function parseMethodologyResponse(text: string, aiGenerated = false): Methodology[] {
   let jsonStr = text.trim();
 
   const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -368,6 +368,7 @@ function parseMethodologyResponse(text: string): Methodology[] {
     id: crypto.randomUUID(),
     name: item.name || '未命名方法论',
     origin: item.origin || '',
+    category: item.category || '未分类',
     description: item.description || '',
     coreIdea: item.coreIdea || '',
     applicability: item.applicability || '',
@@ -377,6 +378,7 @@ function parseMethodologyResponse(text: string): Methodology[] {
     sources: item.sources || '',
     selected: false,
     createdAt: new Date().toISOString(),
+    aiGenerated,
   }));
 }
 
@@ -466,6 +468,82 @@ export async function aiCascadeLayer(
     const rawText = await callChatAPI(settings, messages, signal);
     const data = parseLayerResponse(rawText, layer);
     return { success: true, data, rawText, messages };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '未知错误';
+    return { success: false, error: msg, messages };
+  }
+}
+
+// ========== AI Create Methodology ==========
+
+export interface CreateMethodologyResult {
+  success: boolean;
+  methodologies?: Methodology[];
+  rawText?: string;
+  error?: string;
+  messages?: AIMessage[];
+}
+
+/**
+ * AI creates custom methodologies when search finds nothing suitable.
+ * This generates 2-3 tailored methodologies based on the user's context and intent.
+ */
+export async function aiCreateMethodology(
+  settings: AISettings,
+  canvas: CanvasData,
+  intent?: IntentAnalysis,
+  signal?: AbortSignal,
+  _promptStore?: PromptStore
+): Promise<CreateMethodologyResult> {
+  const context = buildUpperLayersContext(canvas, 2);
+
+  let intentContext = '';
+  if (intent) {
+    intentContext = `\n\n用户的原始意图：
+- 领域：${intent.domain}
+- 目标：${intent.goal}
+- 范围：${intent.scope}
+- 关键维度：${intent.keyDimensions.join('、')}
+- 隐含约束：${intent.constraints.join('、')}`;
+  }
+
+  const systemPrompt = `你是一位资深的方法论设计专家。当现有方法论无法满足用户需求时，你可以基于用户的上层约束和意图，**创造性地设计 2-3 个定制化的方法论框架**。
+
+设计原则：
+1. 每个方法论都必须严格匹配用户上层约束（元方法论标准、范式要求、世界观偏好）
+2. 要有清晰的理论基础，可以融合多个已有方法论的精华
+3. 必须可操作——有明确的步骤和验收标准
+4. 标注"AI 定制"来源，并说明参考了哪些现有理论
+5. 为每个方法论指定一个分类标签
+
+请严格按以下 JSON 数组格式返回（不要包含 markdown 代码块标记，直接返回 JSON）：
+[
+  {
+    "name": "方法论名称（简洁有力）",
+    "origin": "AI 定制 · 融合自: xxx + yyy",
+    "category": "分类标签（如：项目管理、产品设计、系统思维、决策分析、组织管理、技术架构、个人成长、创新方法 等）",
+    "description": "200字以内详细描述，包含设计思路和理论基础",
+    "coreIdea": "一句话核心思想",
+    "applicability": "精确匹配的适用场景",
+    "steps": "关键步骤（用编号列出，5-8步）",
+    "pros": "优势（2-3点）",
+    "cons": "局限与风险（2-3点）",
+    "sources": "参考的理论/方法论来源"
+  }
+]`;
+
+  const messages: AIMessage[] = [
+    { role: 'system', content: systemPrompt },
+    {
+      role: 'user',
+      content: `${context}${intentContext}\n\n现有的方法论搜索没有找到完全匹配的结果。请基于以上约束和意图，为用户设计 2-3 个定制化的方法论框架。`,
+    },
+  ];
+
+  try {
+    const rawText = await callChatAPI(settings, messages, signal);
+    const methodologies = parseMethodologyResponse(rawText, true);
+    return { success: true, methodologies, rawText, messages };
   } catch (err) {
     const msg = err instanceof Error ? err.message : '未知错误';
     return { success: false, error: msg, messages };

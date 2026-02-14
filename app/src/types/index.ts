@@ -26,6 +26,7 @@ export interface Methodology {
   id: string;
   name: string;
   origin: string;
+  category: string; // e.g. '项目管理', '产品设计', '系统思维', '决策分析' etc.
   description: string;
   coreIdea: string;
   applicability: string;
@@ -35,6 +36,8 @@ export interface Methodology {
   sources: string;
   selected: boolean;
   createdAt: string;
+  /** true if this methodology was AI-created (not found via search) */
+  aiGenerated?: boolean;
 }
 
 export interface CanvasData {

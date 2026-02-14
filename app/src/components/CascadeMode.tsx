@@ -5,6 +5,7 @@ import {
   aiCascadeLayerWithIntent,
   aiAnalyzeIntent,
   aiSearchMethodologies,
+  aiCreateMethodology,
 } from '../services/ai';
 import type {
   IntentAnalysis,
@@ -254,15 +255,59 @@ export function CascadeMode({
           )
         );
       } else {
-        // No methodologies found or search failed — fallback to direct AI generation
-        autoTriggeredRef.current = null; // Allow re-trigger
-        setSteps((prev) =>
-          prev.map((s, i) =>
-            i === stepIdx ? { ...s, status: 'pending' } : s
-          )
+        // No methodologies found — try AI creation as fallback
+        addInteraction({
+          type: 'methodology-search',
+          layerId: 2,
+          messages: result.messages || [],
+          response: '搜索无结果，正在 AI 创建定制方法论...',
+          timestamp: new Date().toISOString(),
+        });
+
+        // Call AI to create custom methodologies
+        const ctrl2 = new AbortController();
+        const createResult = await aiCreateMethodology(
+          aiSettings,
+          canvas,
+          intentAnalysis,
+          ctrl2.signal,
+          promptStore
         );
-        // Directly generate for this layer as fallback
-        doGenerate(stepIdx);
+
+        if (createResult.messages) {
+          addInteraction({
+            type: 'methodology-search',
+            layerId: 2,
+            messages: createResult.messages,
+            response: createResult.rawText || createResult.error || '',
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        if (createResult.success && createResult.methodologies && createResult.methodologies.length > 0) {
+          setSearchedMethodologies(createResult.methodologies);
+          const ids = new Set(createResult.methodologies.map((m: Methodology) => m.id));
+          setMethodologyExpanded(ids);
+
+          if (onUpdateMethodologies) {
+            onUpdateMethodologies(createResult.methodologies);
+          }
+
+          setSteps((prev) =>
+            prev.map((s, i) =>
+              i === stepIdx ? { ...s, status: 'pending' } : s
+            )
+          );
+        } else {
+          // Both search and creation failed — fallback to direct AI generation
+          autoTriggeredRef.current = null;
+          setSteps((prev) =>
+            prev.map((s, i) =>
+              i === stepIdx ? { ...s, status: 'pending' } : s
+            )
+          );
+          doGenerate(stepIdx);
+        }
       }
     },
     [aiSettings, canvas, intentAnalysis, onUpdateMethodologies, addInteraction, doGenerate, promptStore]
@@ -1180,7 +1225,9 @@ function MethodologySearchPanel({
         <div className="flex items-center gap-2 text-sm">
           <Library size={16} className="text-violet-400" />
           <span className="text-violet-300 font-medium">
-            找到 {methodologies.length} 个匹配的方法论（已存入方法论库）
+            {methodologies.some((m) => m.aiGenerated)
+              ? `AI 创建了 ${methodologies.length} 个定制方法论（已存入方法论库）`
+              : `找到 ${methodologies.length} 个匹配的方法论（已存入方法论库）`}
           </span>
         </div>
         <p className="text-xs text-slate-500 mt-1 ml-6">
@@ -1214,6 +1261,16 @@ function MethodologySearchPanel({
                 <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400">
                   {m.origin}
                 </span>
+                {m.category && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    {m.category}
+                  </span>
+                )}
+                {m.aiGenerated && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    AI 定制
+                  </span>
+                )}
               </div>
               <p className="text-sm text-slate-400 mt-1">{m.coreIdea}</p>
             </div>

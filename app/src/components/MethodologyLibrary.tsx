@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import type { Methodology, AISettings, CanvasData, LayerData } from '../types';
 import type { PromptStore } from '../hooks/usePrompts';
-import { aiSearchMethodologies } from '../services/ai';
+import { aiSearchMethodologies, aiCreateMethodology } from '../services/ai';
 import {
   Search,
   Loader2,
@@ -16,6 +16,9 @@ import {
   Star,
   StarOff,
   RefreshCw,
+  Plus,
+  Tag,
+  Filter,
 } from 'lucide-react';
 
 interface Props {
@@ -33,7 +36,6 @@ interface Props {
  * Format methodology into layer 2 fields
  */
 function methodologyToLayerData(m: Methodology, allSelected: Methodology[]): LayerData {
-  // Build alternatives text from all methodologies in library
   const altLines = allSelected.length > 1
     ? allSelected.map((s, i) => `${String.fromCharCode(65 + i)}: ${s.name} — ${s.coreIdea}`).join('\n')
     : `A: ${m.name} — ${m.coreIdea}\nB: （待补充其他方案）`;
@@ -89,6 +91,17 @@ function MethodologyCard({
             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400 border border-slate-600/50">
               {m.origin}
             </span>
+            {m.category && m.category !== '未分类' && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                <Tag size={10} className="inline mr-0.5 -mt-0.5" />
+                {m.category}
+              </span>
+            )}
+            {m.aiGenerated && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                AI 定制
+              </span>
+            )}
             {m.selected && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">
                 已选定
@@ -173,10 +186,27 @@ export function MethodologyLibrary({
   promptStore,
 }: Props) {
   const [searching, setSearching] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [customQuery, setCustomQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Derive categories from methodologies
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    methodologies.forEach((m) => {
+      if (m.category && m.category !== '未分类') cats.add(m.category);
+    });
+    return Array.from(cats).sort();
+  }, [methodologies]);
+
+  // Filtered list
+  const filteredMethodologies = useMemo(() => {
+    if (!activeCategory) return methodologies;
+    return methodologies.filter((m) => m.category === activeCategory);
+  }, [methodologies, activeCategory]);
 
   const handleSearch = useCallback(async () => {
     if (!aiConfigured) return;
@@ -194,12 +224,10 @@ export function MethodologyLibrary({
     );
 
     if (result.success && result.methodologies) {
-      // Append new results (avoid duplicates by name)
       const existingNames = new Set(methodologies.map((m) => m.name));
       const newOnes = result.methodologies.filter((m) => !existingNames.has(m.name));
       onUpdateMethodologies([...methodologies, ...newOnes]);
 
-      // Auto-expand new ones
       const newIds = new Set(newOnes.map((m) => m.id));
       setExpandedIds((prev) => new Set([...prev, ...newIds]));
     } else {
@@ -207,7 +235,35 @@ export function MethodologyLibrary({
     }
 
     setSearching(false);
-  }, [aiConfigured, aiSettings, canvas, customQuery, methodologies, onUpdateMethodologies]);
+  }, [aiConfigured, aiSettings, canvas, customQuery, methodologies, onUpdateMethodologies, promptStore]);
+
+  const handleCreate = useCallback(async () => {
+    if (!aiConfigured) return;
+    setCreating(true);
+    setError(null);
+
+    abortRef.current = new AbortController();
+    const result = await aiCreateMethodology(
+      aiSettings,
+      canvas,
+      undefined,
+      abortRef.current.signal,
+      promptStore
+    );
+
+    if (result.success && result.methodologies) {
+      const existingNames = new Set(methodologies.map((m) => m.name));
+      const newOnes = result.methodologies.filter((m) => !existingNames.has(m.name));
+      onUpdateMethodologies([...methodologies, ...newOnes]);
+
+      const newIds = new Set(newOnes.map((m) => m.id));
+      setExpandedIds((prev) => new Set([...prev, ...newIds]));
+    } else {
+      setError(result.error || '创建失败');
+    }
+
+    setCreating(false);
+  }, [aiConfigured, aiSettings, canvas, methodologies, onUpdateMethodologies, promptStore]);
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -240,16 +296,16 @@ export function MethodologyLibrary({
 
   const handleApply = useCallback(() => {
     if (selectedMethodologies.length === 0) return;
-    // Apply the first selected one as primary, include all selected as alternatives
     const primary = selectedMethodologies[0];
     const data = methodologyToLayerData(primary, selectedMethodologies);
     onApplyToLayer(data);
     onGoToLayer(2);
   }, [selectedMethodologies, onApplyToLayer, onGoToLayer]);
 
-  // Check if upper layers have content
   const hasUpperContext =
     canvas.layers[3] || canvas.layers[4] || canvas.layers[5] || canvas.layers[6];
+
+  const isBusy = searching || creating;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -262,7 +318,7 @@ export function MethodologyLibrary({
           <div>
             <h2 className="text-xl font-bold text-white">方法论库</h2>
             <p className="text-sm text-slate-400">
-              基于上层约束搜索真实方法论，选定后应用到第 2 层
+              搜索真实方法论或让 AI 创建定制方法论，选定后应用到第 2 层
             </p>
           </div>
         </div>
@@ -294,11 +350,11 @@ export function MethodologyLibrary({
         </div>
       )}
 
-      {/* Search section */}
+      {/* Search + Create section */}
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3">
         <div className="flex items-center gap-2 text-sm text-slate-400 mb-1">
           <Search size={14} />
-          <span>AI 方法论搜索</span>
+          <span>AI 方法论搜索 / 创建</span>
         </div>
 
         <div className="flex gap-2">
@@ -306,15 +362,15 @@ export function MethodologyLibrary({
             type="text"
             value={customQuery}
             onChange={(e) => setCustomQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !searching && handleSearch()}
-            placeholder={'可选：输入额外搜索条件，如"敏捷开发"、"建筑领域"、"小团队适用"...'}
+            onKeyDown={(e) => e.key === 'Enter' && !isBusy && handleSearch()}
+            placeholder={'可选：输入搜索条件，如"敏捷开发"、"建筑领域"、"小团队适用"...'}
             className="flex-1 bg-slate-900/60 border border-slate-600/50 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500/50 transition-colors"
           />
           <button
             onClick={handleSearch}
-            disabled={searching || !aiConfigured}
+            disabled={isBusy || !aiConfigured}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer shrink-0 ${
-              searching || !aiConfigured
+              isBusy || !aiConfigured
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 : 'bg-violet-600 hover:bg-violet-500 text-white'
             }`}
@@ -336,6 +392,28 @@ export function MethodologyLibrary({
               </>
             )}
           </button>
+          <button
+            onClick={handleCreate}
+            disabled={isBusy || !aiConfigured}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer shrink-0 ${
+              isBusy || !aiConfigured
+                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+            }`}
+            title="AI 根据上层约束创建定制化方法论"
+          >
+            {creating ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                创建中...
+              </>
+            ) : (
+              <>
+                <Plus size={14} />
+                AI 创建
+              </>
+            )}
+          </button>
         </div>
 
         {!aiConfigured && (
@@ -348,18 +426,54 @@ export function MethodologyLibrary({
         <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
           <AlertTriangle size={16} className="shrink-0 mt-0.5" />
           <div>
-            <span className="font-medium">搜索失败：</span>
+            <span className="font-medium">操作失败：</span>
             {error}
           </div>
         </div>
       )}
 
+      {/* Category filter */}
+      {categories.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
+            <Filter size={12} />
+            分类：
+          </div>
+          <button
+            onClick={() => setActiveCategory(null)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+              activeCategory === null
+                ? 'bg-violet-600/20 text-violet-400 border-violet-500/30'
+                : 'bg-slate-800/40 text-slate-500 border-slate-700/50 hover:text-slate-300'
+            }`}
+          >
+            全部 ({methodologies.length})
+          </button>
+          {categories.map((cat) => {
+            const count = methodologies.filter((m) => m.category === cat).length;
+            return (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat === activeCategory ? null : cat)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+                  activeCategory === cat
+                    ? 'bg-blue-600/20 text-blue-400 border-blue-500/30'
+                    : 'bg-slate-800/40 text-slate-500 border-slate-700/50 hover:text-slate-300'
+                }`}
+              >
+                {cat} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Results */}
-      {methodologies.length > 0 && (
+      {filteredMethodologies.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-slate-400">
-              共 {methodologies.length} 个方法论
+              {activeCategory ? `${activeCategory}` : '全部'} · 共 {filteredMethodologies.length} 个方法论
               {selectedMethodologies.length > 0 && (
                 <span className="ml-2 text-violet-400">
                   · 已选定 {selectedMethodologies.length} 个
@@ -368,7 +482,7 @@ export function MethodologyLibrary({
             </h3>
           </div>
 
-          {methodologies.map((m) => (
+          {filteredMethodologies.map((m) => (
             <MethodologyCard
               key={m.id}
               m={m}
@@ -382,13 +496,29 @@ export function MethodologyLibrary({
       )}
 
       {/* Empty state */}
-      {methodologies.length === 0 && !searching && !error && (
+      {methodologies.length === 0 && !isBusy && !error && (
         <div className="text-center py-12 text-slate-500">
           <Library size={40} className="mx-auto mb-3 opacity-30" />
           <p className="text-base font-medium">方法论库为空</p>
           <p className="text-sm mt-1">
-            点击上方"搜索方法论"，AI 将根据你的上层约束推荐真实方法论
+            搜索真实方法论，或让 AI 为你创建定制方法论
           </p>
+        </div>
+      )}
+
+      {/* Filtered empty */}
+      {methodologies.length > 0 && filteredMethodologies.length === 0 && (
+        <div className="text-center py-8 text-slate-500">
+          <Tag size={28} className="mx-auto mb-2 opacity-30" />
+          <p className="text-sm">
+            「{activeCategory}」分类下暂无方法论
+          </p>
+          <button
+            onClick={() => setActiveCategory(null)}
+            className="mt-2 text-xs text-blue-400 underline cursor-pointer"
+          >
+            查看全部
+          </button>
         </div>
       )}
 
@@ -406,6 +536,9 @@ export function MethodologyLibrary({
                   <div key={m.id}>
                     {i === 0 ? '主方案：' : '备选：'}
                     <span className="text-slate-300">{m.name}</span>
+                    {m.category && m.category !== '未分类' && (
+                      <span className="text-xs text-blue-400 ml-1.5">({m.category})</span>
+                    )}
                   </div>
                 ))}
               </div>

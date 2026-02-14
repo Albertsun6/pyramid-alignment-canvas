@@ -391,3 +391,42 @@
 
 **状态标签**：✅完成
 ---
+
+## 2026-02-14 22:00
+**对话标题**：方法论库增强——AI创建定制方法论+分类管理
+
+**用户需求**：
+1. 方法论层搜索不到时，让 AI 帮助创建并保存到方法论库
+2. 方法论库增加分类功能
+3. 更新相关文档并发布
+
+**解决方案**：
+
+**功能1 - AI 创建定制方法论**：
+- 新增 `aiCreateMethodology()` 服务函数，当搜索无结果时 AI 根据上层约束设计 2-3 个定制方法论
+- 定制方法论融合已有理论精华，标注 "AI 定制" 来源，包含完整的步骤/优劣/参考来源
+- CascadeMode 中 `doMethodologySearch` 搜索无结果时自动调用 AI 创建，创建结果存入方法论库
+- MethodologyLibrary 新增 "AI 创建" 独立按钮，用户可随时手动触发
+
+**功能2 - 方法论库分类管理**：
+- `Methodology` 类型新增 `category`（分类标签）和 `aiGenerated`（AI定制标识）字段
+- 搜索/创建 prompt 要求 AI 返回 `category` 字段（如：项目管理、产品设计、系统思维、决策分析等）
+- MethodologyLibrary UI 增加分类筛选条：自动从数据中提取分类 → 可按分类过滤
+- 方法论卡片展示分类标签和 "AI 定制" 标识
+
+**功能3 - 文档更新**：
+- docs.ts 中多处过时内容更新（移除"引导模式"/"自由填写"引用）
+- 新增"方法论库"使用说明段落
+- 更新开发里程碑、BPMN 流程图说明、文件树、AI Prompt 汇总
+- 新增 "AI 创建定制方法论" prompt 文档说明
+
+**代码改动**：
+- 修改 `src/types/index.ts`：Methodology 接口增加 category、aiGenerated 字段
+- 修改 `src/services/ai.ts`：新增 aiCreateMethodology 函数 + parseMethodologyResponse 增加 category 解析
+- 修改 `src/hooks/usePrompts.ts`：methodology prompt 增加 category 字段要求
+- 重写 `src/components/MethodologyLibrary.tsx`：分类筛选 + AI创建按钮 + 分类标签展示
+- 修改 `src/components/CascadeMode.tsx`：搜索无结果时回退调用 aiCreateMethodology + 分类/AI定制标签显示
+- 修改 `src/data/docs.ts`：大量文档内容更新
+
+**状态标签**：✅完成
+---
