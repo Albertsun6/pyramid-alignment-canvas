@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { AISettings } from '../types';
-import type { PromptStore, PromptTemplate } from '../hooks/usePrompts';
+import type { PromptStore } from '../hooks/usePrompts';
 import { DEFAULT_PROMPTS } from '../hooks/usePrompts';
 import { aiImprovePrompt } from '../services/ai';
 import {

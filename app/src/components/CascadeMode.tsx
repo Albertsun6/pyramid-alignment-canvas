@@ -928,10 +928,9 @@ function AnalysisField({ label, value }: { label: string; value: string }) {
 
 function InlinePromptViewer({
   interaction,
-  layerName,
 }: {
   interaction: AIInteraction;
-  layerName: string;
+  layerName?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
 
