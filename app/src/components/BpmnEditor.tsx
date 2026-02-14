@@ -98,7 +98,7 @@ export function BpmnEditor({ xml, editable = false, onXmlChange }: Props) {
       <div
         ref={containerRef}
         className="w-full h-full"
-        style={{ minHeight: '400px' }}
+        style={{ minHeight: '600px' }}
       />
     </div>
   );

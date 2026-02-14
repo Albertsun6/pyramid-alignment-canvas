@@ -143,7 +143,7 @@ export function FlowchartPanel() {
       {/* BPMN Canvas */}
       <div
         className="flex-1 rounded-xl border border-slate-700/50 overflow-hidden"
-        style={{ background: '#fff', minHeight: '450px' }}
+        style={{ background: '#fff', minHeight: '650px' }}
       >
         <BpmnEditor
           key={`${activeFlowId}-${editable}`}

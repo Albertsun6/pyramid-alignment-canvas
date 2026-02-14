@@ -360,3 +360,34 @@
 
 **状态标签**：✅完成
 ---
+
+## 2026-02-14 18:30
+**对话标题**：修复方法论层卡死 + 流程图加泳道
+
+**用户需求**：
+1. 方法论层（第2层）在级联推导中出现卡死，只显示"跳过此层"
+2. 流程图显示太小，需要加泳道
+
+**解决方案**：
+
+**问题1 - 方法论层卡死**：
+- **根因**：`doMethodologySearch` 完成后无论成功/失败都把状态设回 `pending`，但 `autoTriggeredRef` 已标记此步骤已触发。当搜索无结果时，步骤停留在 `pending` 且不会再自动触发任何操作，用户只能看到"跳过此层"。
+- **修复**：搜索无结果或失败时，重置 `autoTriggeredRef`，并自动回退调用 `doGenerate` 让 AI 直接填写该层内容。
+- 同时修复了完成页面中残留的"自由填写"文案。
+
+**问题2 - 流程图太小+加泳道**：
+- 所有 3 个 BPMN 流程图重写为含泳道（Collaboration + Participant + LaneSet）结构：
+  - **AI 级联推导**：用户操作泳道 + AI 系统泳道，横向展开所有步骤
+  - **一眼诊断**：用户操作泳道 + 系统处理泳道
+  - **方法论搜索与应用**：用户操作泳道 + AI 系统泳道
+- 容器最小高度从 450px 增大到 650px
+- BpmnEditor 内部最小高度从 400px 增大到 600px
+
+**代码改动**：
+- 修改 `src/components/CascadeMode.tsx`：doMethodologySearch 失败回退逻辑 + 文案修复
+- 重写 `src/data/bpmn-flows.ts`：全部 BPMN XML 加入泳道
+- 修改 `src/components/FlowchartPanel.tsx`：增大容器高度
+- 修改 `src/components/BpmnEditor.tsx`：增大编辑器高度
+
+**状态标签**：✅完成
+---

@@ -246,15 +246,26 @@ export function CascadeMode({
         if (onUpdateMethodologies) {
           onUpdateMethodologies(result.methodologies);
         }
-      }
 
-      setSteps((prev) =>
-        prev.map((s, i) =>
-          i === stepIdx ? { ...s, status: 'pending' } : s
-        )
-      );
+        // Show results, let user pick
+        setSteps((prev) =>
+          prev.map((s, i) =>
+            i === stepIdx ? { ...s, status: 'pending' } : s
+          )
+        );
+      } else {
+        // No methodologies found or search failed — fallback to direct AI generation
+        autoTriggeredRef.current = null; // Allow re-trigger
+        setSteps((prev) =>
+          prev.map((s, i) =>
+            i === stepIdx ? { ...s, status: 'pending' } : s
+          )
+        );
+        // Directly generate for this layer as fallback
+        doGenerate(stepIdx);
+      }
     },
-    [aiSettings, canvas, intentAnalysis, onUpdateMethodologies, addInteraction]
+    [aiSettings, canvas, intentAnalysis, onUpdateMethodologies, addInteraction, doGenerate, promptStore]
   );
 
   // ==================== Auto-trigger ====================
@@ -798,7 +809,7 @@ export function CascadeMode({
                 全部层级已完成！
               </div>
               <p className="text-slate-400 text-sm mb-4">
-                你已经从意图出发，经过终极承诺推导到了具体方法。可以导出画布或切换到自由填写模式继续调整。
+                你已经从意图出发，经过终极承诺推导到了具体方法。可以导出画布或切换到画布总览继续调整。
               </p>
               <div className="flex items-center justify-center gap-3">
                 <button
@@ -812,7 +823,7 @@ export function CascadeMode({
                   onClick={onExit}
                   className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors cursor-pointer"
                 >
-                  返回自由填写模式
+                  返回画布总览
                 </button>
               </div>
             </div>
